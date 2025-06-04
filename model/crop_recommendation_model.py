@@ -8,6 +8,7 @@ from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import accuracy_score, classification_report
 import joblib
 import os
+import streamlit as st
 
 class CropRecommender:
     def __init__(self):
@@ -15,11 +16,13 @@ class CropRecommender:
         self.models = {
             'random_forest': RandomForestClassifier(
                 n_estimators=100,
-                random_state=42
+                random_state=42,
+                n_jobs=-1  # Use all available cores
             ),
             'xgboost': XGBClassifier(
                 n_estimators=100,
-                random_state=42
+                random_state=42,
+                n_jobs=-1  # Use all available cores
             ),
             'svm': SVC(
                 kernel='rbf',
@@ -32,6 +35,14 @@ class CropRecommender:
         self.best_model_name = None
         self.scaler = StandardScaler()
         self.label_encoder = LabelEncoder()
+        self.model_scores = {}
+        self.crop_labels = None
+        self._is_initialized = False
+
+    def _initialize_models(self):
+        """Initialize models with cached data loading"""
+        if self._is_initialized:
+            return
 
         try:
             # Load and prepare data
@@ -49,6 +60,7 @@ class CropRecommender:
 
             # Encode labels
             y = self.label_encoder.fit_transform(y)
+            self.crop_labels = self.label_encoder.classes_
 
             # Split data
             X_train, X_test, y_train, y_test = train_test_split(
@@ -62,7 +74,6 @@ class CropRecommender:
 
             # Train and evaluate models
             best_accuracy = 0
-            model_scores = {}
 
             for name, model in self.models.items():
                 try:
@@ -75,10 +86,10 @@ class CropRecommender:
 
                     # Cross validation
                     cv_scores = cross_val_score(
-                        model, X_train_scaled, y_train, cv=5
+                        model, X_train_scaled, y_train, cv=5, n_jobs=-1
                     )
 
-                    model_scores[name] = {
+                    self.model_scores[name] = {
                         'accuracy': accuracy,
                         'cv_mean': cv_scores.mean(),
                         'cv_std': cv_scores.std()
@@ -96,9 +107,7 @@ class CropRecommender:
             if not self.best_model:
                 raise RuntimeError("No models were successfully trained")
 
-            self.model_scores = model_scores
-            # Store unique crop labels
-            self.crop_labels = self.label_encoder.classes_
+            self._is_initialized = True
 
         except Exception as e:
             error_msg = f"Failed to initialize models: {str(e)}"
@@ -110,6 +119,9 @@ class CropRecommender:
         Predict crop using the best performing model
         features: [N, P, K, temperature, humidity, ph, rainfall]
         """
+        if not self._is_initialized:
+            self._initialize_models()
+
         if not self.best_model:
             raise RuntimeError("Models not properly initialized")
 
@@ -123,12 +135,14 @@ class CropRecommender:
 
     def get_model_scores(self):
         """Return evaluation metrics for all models"""
-        if not hasattr(self, 'model_scores'):
-            return {}
+        if not self._is_initialized:
+            self._initialize_models()
         return self.model_scores
 
     def get_feature_importance(self):
         """Return feature importance scores from Random Forest model"""
+        if not self._is_initialized:
+            self._initialize_models()
         if self.best_model_name == 'random_forest':
             return self.best_model.feature_importances_
         else:
@@ -136,6 +150,6 @@ class CropRecommender:
 
     def get_crop_labels(self):
         """Return list of possible crops"""
-        if not hasattr(self, 'crop_labels'):
-            return []
-        return self.crop_labels
+        if not self._is_initialized:
+            self._initialize_models()
+        return self.crop_labels if self.crop_labels is not None else []

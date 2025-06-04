@@ -10,6 +10,7 @@ from datetime import datetime
 from streamlit_lottie import st_lottie
 import requests
 import json
+from PIL import Image
 
 # Page configuration
 st.set_page_config(
@@ -18,6 +19,46 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Cache the model initialization
+@st.cache_resource(show_spinner=False)
+def initialize_system():
+    """Initialize and cache the model system"""
+    try:
+        model = CropRecommender()
+        irrigation = IrrigationScheduler()
+        economic = EconomicAnalyzer()
+        rotation = CropRotationPlanner()
+        return model, irrigation, economic, rotation
+    except Exception as e:
+        st.error(f"Error initializing model: {str(e)}")
+        return None
+
+# Initialize the system
+try:
+    model, irrigation_scheduler, economic_analyzer, rotation_planner = initialize_system()
+    if model is None:
+        st.error("Failed to initialize the system. Please check the logs for more information.")
+        st.stop()
+except Exception as e:
+    st.error(f"Failed to initialize the system: {str(e)}")
+    st.stop()
+
+# Load the dataset
+@st.cache_data(show_spinner=False)
+def load_dataset():
+    """Load and cache the dataset"""
+    try:
+        df = pd.read_csv("attached_assets/Crop_recommendation (1).csv")
+        return df
+    except Exception as e:
+        st.error(f"Error loading dataset: {str(e)}")
+        return None
+
+df = load_dataset()
+if df is None:
+    st.error("Failed to load the dataset. Please check if the file exists.")
+    st.stop()
 
 # Load custom CSS
 with open('styles/custom.css') as f:
@@ -98,8 +139,13 @@ def load_lottieurl(url: str):
         return None
     return r.json()
 
+# Load and cache the Lottie animation
+@st.cache_data(show_spinner=False)
+def get_lottie_animation():
+    return load_lottieurl("https://assets5.lottiefiles.com/packages/lf20_49rdyysj.json")
+
 # Hero section with animation
-lottie_agri = load_lottieurl("https://assets5.lottiefiles.com/packages/lf20_49rdyysj.json")
+lottie_agri = get_lottie_animation()
 col1, col2 = st.columns([2, 1])
 with col1:
     st.title("🌾 Smart Crop Recommendation System")
@@ -112,19 +158,6 @@ with col1:
 with col2:
     if lottie_agri:
         st_lottie(lottie_agri, height=200, key="agriculture")
-
-# Initialize the model and advanced features
-@st.cache_resource
-def load_model():
-    return CropRecommender(), IrrigationScheduler(), EconomicAnalyzer(), CropRotationPlanner()
-
-try:
-    model, irrigation_scheduler, economic_analyzer, rotation_planner = load_model()
-    # Load dataset for range calculation
-    df = pd.read_csv("attached_assets/Crop_recommendation (1).csv")
-except Exception as e:
-    st.error("Failed to initialize the system. Please try again later.")
-    st.stop()
 
 # Create tabs with modern styling
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
