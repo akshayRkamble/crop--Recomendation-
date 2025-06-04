@@ -3,7 +3,7 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from xgboost import XGBClassifier
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import accuracy_score, classification_report
 import joblib
@@ -31,6 +31,7 @@ class CropRecommender:
         self.best_model = None
         self.best_model_name = None
         self.scaler = StandardScaler()
+        self.label_encoder = LabelEncoder()
 
         try:
             # Load and prepare data
@@ -45,6 +46,9 @@ class CropRecommender:
             # Prepare features and target
             X = df[['N', 'P', 'K', 'temperature', 'humidity', 'ph', 'rainfall']].values
             y = df['label'].values
+
+            # Encode labels
+            y = self.label_encoder.fit_transform(y)
 
             # Split data
             X_train, X_test, y_train, y_test = train_test_split(
@@ -94,7 +98,7 @@ class CropRecommender:
 
             self.model_scores = model_scores
             # Store unique crop labels
-            self.crop_labels = sorted(df['label'].unique())
+            self.crop_labels = self.label_encoder.classes_
 
         except Exception as e:
             error_msg = f"Failed to initialize models: {str(e)}"
@@ -112,7 +116,10 @@ class CropRecommender:
         features_scaled = self.scaler.transform(features.reshape(1, -1))
         prediction = self.best_model.predict(features_scaled)
         probabilities = self.best_model.predict_proba(features_scaled)
-        return prediction[0], probabilities[0]
+        
+        # Convert numeric prediction back to original label
+        prediction_label = self.label_encoder.inverse_transform(prediction)
+        return prediction_label[0], probabilities[0]
 
     def get_model_scores(self):
         """Return evaluation metrics for all models"""
